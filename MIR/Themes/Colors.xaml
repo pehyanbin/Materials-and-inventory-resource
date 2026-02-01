@@ -1,0 +1,38 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    
+    <!-- Primary Colors -->
+    <Color x:Key="PrimaryBlue">#2563EB</Color>
+    <Color x:Key="PrimaryDarkBlue">#1D4ED8</Color>
+    <Color x:Key="PrimaryLightBlue">#EFF6FF</Color>
+    
+    <!-- Neutral Colors -->
+    <Color x:Key="BgWhite">#FFFFFF</Color>
+    <Color x:Key="BgGray">#F9FAFB</Color>
+    <Color x:Key="BorderGray">#E5E7EB</Color>
+    <Color x:Key="TextDark">#111827</Color>
+    <Color x:Key="TextGray">#4B5563</Color>
+    <Color x:Key="TextLight">#9CA3AF</Color>
+    
+    <!-- State Colors -->
+    <Color x:Key="SuccessGreen">#10B981</Color>
+    <Color x:Key="WarningOrange">#F59E0B</Color>
+    <Color x:Key="ErrorRed">#EF4444</Color>
+
+    <!-- Solid Color Brushes -->
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryBlue}"/>
+    <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource PrimaryDarkBlue}"/>
+    <SolidColorBrush x:Key="PrimaryLightBrush" Color="{StaticResource PrimaryLightBlue}"/>
+    
+    <SolidColorBrush x:Key="BgWhiteBrush" Color="{StaticResource BgWhite}"/>
+    <SolidColorBrush x:Key="BgGrayBrush" Color="{StaticResource BgGray}"/>
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderGray}"/>
+    <SolidColorBrush x:Key="TextDarkBrush" Color="{StaticResource TextDark}"/>
+    <SolidColorBrush x:Key="TextGrayBrush" Color="{StaticResource TextGray}"/>
+    <SolidColorBrush x:Key="TextLightBrush" Color="{StaticResource TextLight}"/>
+    
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessGreen}"/>
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningOrange}"/>
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorRed}"/>
+
+</ResourceDictionary>
