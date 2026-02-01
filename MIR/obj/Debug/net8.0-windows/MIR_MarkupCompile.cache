@@ -1,20 +1,20 @@
 ﻿MIR
-1.0.0.0
+
 
 winexe
 C#
 .cs
-c:\Users\pehya\Downloads\mir_v1\MIR\obj\Debug\net8.0-windows\
+C:\Users\pehya\Downloads\mir\MIR\obj\Debug\net8.0-windows\
 MIR
 none
 false
 TRACE;DEBUG;NET;NET8_0;NETCOREAPP;WINDOWS;WINDOWS7_0;NET5_0_OR_GREATER;NET6_0_OR_GREATER;NET7_0_OR_GREATER;NET8_0_OR_GREATER;NETCOREAPP3_0_OR_GREATER;NETCOREAPP3_1_OR_GREATER;WINDOWS7_0_OR_GREATER
-c:\Users\pehya\Downloads\mir_v1\MIR\App.xaml
-71701182029
+C:\Users\pehya\Downloads\mir\MIR\App.xaml
+8-326772764
 
-27-2012770942
+281647888388
 2151321608610
-Themes\Colors.xaml;Themes\Styles.xaml;Views\DashboardView.xaml;Views\MainWindow.xaml;Views\MaterialsView.xaml;Views\ProductsView.xaml;Views\StockView.xaml;
+Themes\Colors.xaml;Themes\Styles.xaml;Views\DashboardView.xaml;Views\MainWindow.xaml;Views\MaterialsView.xaml;Views\ProductionAnalyzerView.xaml;Views\ProductsView.xaml;Views\StockView.xaml;
 
-True
+False
 

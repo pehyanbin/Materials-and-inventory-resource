@@ -57,6 +57,9 @@ namespace MIR.ViewModels
                 case "Stock":
                     CurrentView = new StockViewModel(_excelService, _authService);
                     break;
+                case "Analyzer":
+                    CurrentView = new ProductionAnalyzerViewModel(_excelService);
+                    break;
                 // Add other views here
                 default:
                     CurrentView = null;

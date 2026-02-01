@@ -23,6 +23,9 @@
         <DataTemplate DataType="{x:Type ViewModels:StockViewModel}">
             <local:StockView/>
         </DataTemplate>
+        <DataTemplate DataType="{x:Type ViewModels:ProductionAnalyzerViewModel}">
+            <local:ProductionAnalyzerView/>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid>
@@ -52,6 +55,7 @@
                     <RadioButton Content="Products" Style="{StaticResource NavButtonStyle}" Command="{Binding NavigateCommand}" CommandParameter="Products" Margin="0,5,0,0"/>
                     <RadioButton Content="Materials" Style="{StaticResource NavButtonStyle}" Command="{Binding NavigateCommand}" CommandParameter="Materials" Margin="0,5,0,0"/>
                     <RadioButton Content="Stock Entries" Style="{StaticResource NavButtonStyle}" Command="{Binding NavigateCommand}" CommandParameter="Stock" Margin="0,5,0,0"/>
+                    <RadioButton Content="Production Analyzer" Style="{StaticResource NavButtonStyle}" Command="{Binding NavigateCommand}" CommandParameter="Analyzer" Margin="0,5,0,0"/>
                     <RadioButton Content="Reports" Style="{StaticResource NavButtonStyle}" Command="{Binding NavigateCommand}" CommandParameter="Reports" Margin="0,5,0,0"/>
                     <RadioButton Content="User Management" Style="{StaticResource NavButtonStyle}" Command="{Binding NavigateCommand}" CommandParameter="Users" Margin="0,5,0,0"/>
                 </StackPanel>

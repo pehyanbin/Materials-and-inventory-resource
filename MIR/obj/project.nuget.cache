@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "kyxASdh5YII=",
+  "dgSpecHash": "OApld23tLKg=",
   "success": true,
-  "projectFilePath": "C:\\Users\\pehya\\Downloads\\mir_test\\MIR\\MIR.csproj",
+  "projectFilePath": "C:\\Users\\pehya\\Downloads\\mir\\MIR\\MIR.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\pehya\\.nuget\\packages\\bcrypt.net-next\\4.0.3\\bcrypt.net-next.4.0.3.nupkg.sha512",
     "C:\\Users\\pehya\\.nuget\\packages\\communitytoolkit.mvvm\\8.4.0\\communitytoolkit.mvvm.8.4.0.nupkg.sha512",

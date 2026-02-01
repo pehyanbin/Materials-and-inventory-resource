@@ -43,6 +43,7 @@ namespace MIR.Services
         // Stock Check
         bool CanProduce(Guid productId, int quantity, out List<(Material material, decimal required, decimal available, decimal shortage)> shortages);
         int MaxProducible(Guid productId);
+        List<(Material Material, decimal Required, decimal Available, decimal Shortage, decimal ImpactPercentage)> GetProductionAnalysis(Guid productId, int quantity);
 
         // Import/Export
         void ExportToExcel(string filePath);

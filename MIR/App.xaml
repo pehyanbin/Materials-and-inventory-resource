@@ -9,7 +9,10 @@
                 <ResourceDictionary Source="Themes/Styles.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             
+            <converters:BoolToVisibilityConverter x:Key="BoolToVisibility"/>
             <converters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+            <converters:BoolToErrorBrushConverter x:Key="BoolToErrorBrushConverter"/>
+            <converters:BoolToErrorTextBrushConverter x:Key="BoolToErrorTextBrushConverter"/>
             <converters:StatusBgConverter x:Key="StatusBgConverter"/>
             <converters:StatusTextConverter x:Key="StatusTextConverter"/>
             <converters:ResultBgConverter x:Key="ResultBgConverter"/>

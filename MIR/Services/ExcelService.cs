@@ -743,6 +743,30 @@ namespace MIR.Services
             return maxQuantity == int.MaxValue ? 0 : maxQuantity;
         }
 
+        public List<(Material Material, decimal Required, decimal Available, decimal Shortage, decimal ImpactPercentage)> GetProductionAnalysis(Guid productId, int quantity)
+        {
+            var analysis = new List<(Material Material, decimal Required, decimal Available, decimal Shortage, decimal ImpactPercentage)>();
+            
+            var bomItems = GetBOMByProductId(productId);
+            var materials = GetAllMaterials();
+            
+            foreach (var bom in bomItems)
+            {
+                var material = materials.FirstOrDefault(m => m.Id == bom.MaterialId);
+                if (material == null) continue;
+                
+                var required = bom.Quantity * quantity;
+                var shortage = Math.Max(0, required - material.CurrentStock);
+                
+                // ImpactPercentage: How much of the total requirement is missing?
+                decimal impact = required > 0 ? (shortage / required) * 100 : 0;
+                
+                analysis.Add((material, required, material.CurrentStock, shortage, impact));
+            }
+            
+            return analysis.OrderByDescending(a => a.ImpactPercentage).ThenByDescending(a => a.Shortage).ToList();
+        }
+
         #endregion
 
         #region Import/Export
