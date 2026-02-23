@@ -5,6 +5,7 @@ using System; // Added for AppDomain, Environment, Guid, DateTime, Enum
 using System.Collections.Generic; // Added for List<User>
 using System.Linq; // Added for FirstOrDefault
 using System.Globalization;
+using System.Threading.Tasks;
 using BCrypt.Net; // Added for BCrypt.Net.BCrypt
 
 namespace MIR.Services
@@ -508,28 +509,25 @@ namespace MIR.Services
                     });
                 }
                 
-                // Populate navigation properties
-                var products = GetAllProducts();
-                var materials = GetAllMaterials();
-                
-                foreach (var bom in bomList)
+                // Populate navigation properties (dictionary lookup + parallel loop)
+                var productById = GetAllProducts().ToDictionary(p => p.Id);
+                var materialById = GetAllMaterials().ToDictionary(m => m.Id);
+
+                Parallel.ForEach(bomList, bom =>
                 {
-                    var product = products.FirstOrDefault(p => p.Id == bom.ProductId);
-                    var material = materials.FirstOrDefault(m => m.Id == bom.MaterialId);
-                    
-                    if (product != null)
+                    if (productById.TryGetValue(bom.ProductId, out var product))
                     {
                         bom.ProductName = product.Name;
                         bom.ProductCode = product.Code;
                     }
-                    
-                    if (material != null)
+
+                    if (materialById.TryGetValue(bom.MaterialId, out var material))
                     {
                         bom.MaterialName = material.Name;
                         bom.MaterialCode = material.Code;
                         bom.MaterialUnit = material.Unit;
                     }
-                }
+                });
                 
                 return bomList;
             }
@@ -652,26 +650,23 @@ namespace MIR.Services
                     });
                 }
                 
-                // Populate navigation properties
-                var materials = GetAllMaterials();
-                var users = GetAllUsers();
-                
-                foreach (var trans in transactions)
+                // Populate navigation properties (dictionary lookup + parallel loop)
+                var materialById = GetAllMaterials().ToDictionary(m => m.Id);
+                var userById = GetAllUsers().ToDictionary(u => u.Id);
+
+                Parallel.ForEach(transactions, trans =>
                 {
-                    var material = materials.FirstOrDefault(m => m.Id == trans.MaterialId);
-                    var user = users.FirstOrDefault(u => u.Id == trans.UserId);
-                    
-                    if (material != null)
+                    if (materialById.TryGetValue(trans.MaterialId, out var material))
                     {
                         trans.MaterialName = material.Name;
                         trans.MaterialCode = material.Code;
                     }
-                    
-                    if (user != null)
+
+                    if (userById.TryGetValue(trans.UserId, out var user))
                     {
                         trans.UserName = user.FullName;
                     }
-                }
+                });
                 
                 return transactions.OrderByDescending(t => t.TransactionDate).ToList();
             }
@@ -773,25 +768,28 @@ namespace MIR.Services
 
         public List<(Material Material, decimal Required, decimal Available, decimal Shortage, decimal ImpactPercentage)> GetProductionAnalysis(Guid productId, int quantity)
         {
-            var analysis = new List<(Material Material, decimal Required, decimal Available, decimal Shortage, decimal ImpactPercentage)>();
-            
             var bomItems = GetBOMByProductId(productId);
-            var materials = GetAllMaterials();
-            
-            foreach (var bom in bomItems)
-            {
-                var material = materials.FirstOrDefault(m => m.Id == bom.MaterialId);
-                if (material == null) continue;
-                
-                var required = bom.Quantity * quantity;
-                var shortage = Math.Max(0, required - material.CurrentStock);
-                
-                // ImpactPercentage: How much of the total requirement is missing?
-                decimal impact = required > 0 ? (shortage / required) * 100 : 0;
-                
-                analysis.Add((material, required, material.CurrentStock, shortage, impact));
-            }
-            
+            var materialById = GetAllMaterials().ToDictionary(m => m.Id);
+
+            var analysis = bomItems
+                .AsParallel()
+                .Select(bom =>
+                {
+                    if (!materialById.TryGetValue(bom.MaterialId, out var material))
+                    {
+                        return ((Material Material, decimal Required, decimal Available, decimal Shortage, decimal ImpactPercentage)?)null;
+                    }
+
+                    var required = bom.Quantity * quantity;
+                    var shortage = Math.Max(0, required - material.CurrentStock);
+                    decimal impact = required > 0 ? (shortage / required) * 100 : 0;
+
+                    return (material, required, material.CurrentStock, shortage, impact);
+                })
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value)
+                .ToList();
+
             return analysis.OrderByDescending(a => a.ImpactPercentage).ThenByDescending(a => a.Shortage).ToList();
         }
 
@@ -809,19 +807,20 @@ namespace MIR.Services
 
         public void ImportFromExcel(string filePath)
         {
+            using var importPackage = new ExcelPackage(new FileInfo(filePath));
+
+            // Support the user-facing planning template:
+            // Sheet 1 "Products": Product | Sum of O/S Qty
+            // Sheet 2 "materials": Item Code | SQL Code | Unit
+            // Sheet 3 "stock"/"stocks" (optional): SQL Code | Stock
+            if (LooksLikePlanningTemplate(importPackage))
+            {
+                ImportPlanningTemplate(importPackage);
+                return;
+            }
+
             lock (_lock)
             {
-                using var importPackage = new ExcelPackage(new FileInfo(filePath));
-
-                // Support the user-facing planning template:
-                // Sheet 1 "Products": Product | Sum of O/S Qty
-                // Sheet 2 "materials": Item Code | SQL Code | Unit
-                // Sheet 3 "stock"/"stocks" (optional): SQL Code | Stock
-                if (LooksLikePlanningTemplate(importPackage))
-                {
-                    ImportPlanningTemplate(importPackage);
-                    return;
-                }
                 
                 // Import Materials
                 var materialsSheet = importPackage.Workbook.Worksheets["Materials"];
@@ -964,10 +963,7 @@ namespace MIR.Services
                 stockQtyCol = stockValueCol;
             }
 
-            var existingProducts = GetAllProducts().ToDictionary(p => p.Code, StringComparer.OrdinalIgnoreCase);
-            var existingMaterials = GetAllMaterials().ToDictionary(m => m.Code, StringComparer.OrdinalIgnoreCase);
             var importedStocksByMaterialCode = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-
             if (stockSheet != null && stockMaterialCodeCol.HasValue && stockQtyCol.HasValue)
             {
                 var stockRowCount = stockSheet.Dimension?.Rows ?? 0;
@@ -975,50 +971,20 @@ namespace MIR.Services
                 {
                     var materialCode = stockSheet.Cells[row, stockMaterialCodeCol.Value].Text.Trim();
                     if (string.IsNullOrWhiteSpace(materialCode)) continue;
-
-                    var stockQty = ParseDecimalFlexible(stockSheet.Cells[row, stockQtyCol.Value].Text);
-                    importedStocksByMaterialCode[materialCode] = stockQty;
+                    importedStocksByMaterialCode[materialCode] = ParseDecimalFlexible(stockSheet.Cells[row, stockQtyCol.Value].Text);
                 }
             }
 
-            var importedProductIds = new HashSet<Guid>();
-            var productIdByCode = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-
+            var productPlans = new List<(string ProductCode, decimal TargetQty)>();
             var productRowCount = productsSheet.Dimension?.Rows ?? 0;
             for (int row = 2; row <= productRowCount; row++)
             {
                 var productCode = productsSheet.Cells[row, productCodeCol].Text.Trim();
                 if (string.IsNullOrWhiteSpace(productCode)) continue;
-
-                var targetQty = ParseDecimalFlexible(productsSheet.Cells[row, productQtyCol].Text);
-
-                if (existingProducts.TryGetValue(productCode, out var existingProduct))
-                {
-                    existingProduct.Name = string.IsNullOrWhiteSpace(existingProduct.Name) ? productCode : existingProduct.Name;
-                    existingProduct.IsActive = true;
-                    UpdateProduct(existingProduct);
-                    productIdByCode[productCode] = existingProduct.Id;
-                    importedProductIds.Add(existingProduct.Id);
-                }
-                else
-                {
-                    var newProduct = new Product
-                    {
-                        Code = productCode,
-                        Name = productCode,
-                        Description = targetQty > 0 ? $"Imported plan quantity: {targetQty}" : string.Empty,
-                        Category = "Finished Goods",
-                        IsActive = true
-                    };
-
-                    AddProduct(newProduct);
-                    existingProducts[productCode] = newProduct;
-                    productIdByCode[productCode] = newProduct.Id;
-                    importedProductIds.Add(newProduct.Id);
-                }
+                productPlans.Add((productCode, ParseDecimalFlexible(productsSheet.Cells[row, productQtyCol].Text)));
             }
 
-            var stagedBomRows = new List<BillOfMaterial>();
+            var bomRows = new List<(string ProductCode, string MaterialCode, decimal QtyPerUnit)>();
             var materialsRowCount = materialsSheet.Dimension?.Rows ?? 0;
             for (int row = 2; row <= materialsRowCount; row++)
             {
@@ -1029,95 +995,10 @@ namespace MIR.Services
                 var quantityPerUnit = ParseDecimalFlexible(materialsSheet.Cells[row, bomQtyCol].Text);
                 if (quantityPerUnit <= 0) continue;
 
-                if (!productIdByCode.TryGetValue(productCode, out var productId))
-                {
-                    // If a BOM row references a product not listed in the Products sheet, create it on the fly.
-                    if (!existingProducts.TryGetValue(productCode, out var product))
-                    {
-                        product = new Product
-                        {
-                            Code = productCode,
-                            Name = productCode,
-                            Category = "Finished Goods",
-                            IsActive = true
-                        };
-                        AddProduct(product);
-                        existingProducts[productCode] = product;
-                    }
-
-                    productId = product.Id;
-                    productIdByCode[productCode] = productId;
-                    importedProductIds.Add(productId);
-                }
-
-                if (!existingMaterials.TryGetValue(materialCode, out var material))
-                {
-                    material = new Material
-                    {
-                        Code = materialCode,
-                        Name = materialCode,
-                        Description = "Imported from planning workbook",
-                        Unit = "pcs",
-                        Category = "Raw Materials"
-                    };
-                    AddMaterial(material);
-                    existingMaterials[materialCode] = material;
-                }
-                if (importedStocksByMaterialCode.TryGetValue(materialCode, out var importedStockForMaterial))
-                {
-                    if (material.CurrentStock != importedStockForMaterial)
-                    {
-                        material.CurrentStock = importedStockForMaterial;
-                        UpdateMaterial(material);
-                    }
-                }
-
-                stagedBomRows.Add(new BillOfMaterial(productId, material.Id, quantityPerUnit)
-                {
-                    ProductCode = productCode,
-                    ProductName = existingProducts.TryGetValue(productCode, out var p) ? p.Name : productCode,
-                    MaterialCode = material.Code,
-                    MaterialName = material.Name,
-                    MaterialUnit = material.Unit
-                });
+                bomRows.Add((productCode, materialCode, quantityPerUnit));
             }
 
-            // Also apply imported stock to materials that exist in stock sheet but were not part of BOM rows.
-            foreach (var stockEntry in importedStocksByMaterialCode)
-            {
-                if (!existingMaterials.TryGetValue(stockEntry.Key, out var material))
-                {
-                    material = new Material
-                    {
-                        Code = stockEntry.Key,
-                        Name = stockEntry.Key,
-                        Description = "Imported from stock sheet",
-                        Unit = "pcs",
-                        Category = "Raw Materials",
-                        CurrentStock = stockEntry.Value
-                    };
-                    AddMaterial(material);
-                    existingMaterials[stockEntry.Key] = material;
-                    continue;
-                }
-
-                if (material.CurrentStock != stockEntry.Value)
-                {
-                    material.CurrentStock = stockEntry.Value;
-                    UpdateMaterial(material);
-                }
-            }
-
-            // Replace BOM rows for imported products to prevent duplicates and keep workbook sync deterministic.
-            foreach (var productId in importedProductIds)
-            {
-                DeleteBOMByProductId(productId);
-            }
-
-            foreach (var bom in stagedBomRows)
-            {
-                AddBOM(bom);
-            }
+            ApplyPlanningTemplateImport(productPlans, bomRows, importedStocksByMaterialCode);
         }
 
         private static Dictionary<string, int> GetHeaderMap(ExcelWorksheet sheet)
@@ -1162,6 +1043,198 @@ namespace MIR.Services
                 return (decimal)dbl;
 
             return 0m;
+        }
+
+        private void ApplyPlanningTemplateImport(
+            List<(string ProductCode, decimal TargetQty)> productPlans,
+            List<(string ProductCode, string MaterialCode, decimal QtyPerUnit)> bomRows,
+            Dictionary<string, decimal> importedStocksByMaterialCode)
+        {
+            lock (_lock)
+            {
+                using var package = new ExcelPackage(new FileInfo(_dataFilePath));
+                var productsSheet = package.Workbook.Worksheets["Products"] ?? package.Workbook.Worksheets.Add("Products");
+                var materialsSheet = package.Workbook.Worksheets["Materials"] ?? package.Workbook.Worksheets.Add("Materials");
+                var bomSheet = package.Workbook.Worksheets["BillOfMaterials"] ?? package.Workbook.Worksheets.Add("BillOfMaterials");
+
+                var productRowByCode = BuildCodeRowMap(productsSheet, 2);
+                var materialRowByCode = BuildCodeRowMap(materialsSheet, 2);
+
+                var productIdByCode = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+                var importedProductIds = new HashSet<Guid>();
+
+                foreach (var (productCode, targetQty) in productPlans)
+                {
+                    int row;
+                    Guid productId;
+
+                    if (productRowByCode.TryGetValue(productCode, out row))
+                    {
+                        productId = EnsureGuid(productsSheet, row, 1);
+                        var existingName = productsSheet.Cells[row, 3].Text.Trim();
+                        var existingDesc = productsSheet.Cells[row, 4].Text.Trim();
+                        var existingCategory = productsSheet.Cells[row, 5].Text.Trim();
+                        var createdAt = ParseDateTimeOrNow(productsSheet.Cells[row, 7].Text);
+
+                        productsSheet.Cells[row, 2].Value = productCode;
+                        productsSheet.Cells[row, 3].Value = string.IsNullOrWhiteSpace(existingName) ? productCode : existingName;
+                        productsSheet.Cells[row, 4].Value = string.IsNullOrWhiteSpace(existingDesc) && targetQty > 0 ? $"Imported plan quantity: {targetQty}" : existingDesc;
+                        productsSheet.Cells[row, 5].Value = string.IsNullOrWhiteSpace(existingCategory) ? "Finished Goods" : existingCategory;
+                        productsSheet.Cells[row, 6].Value = true;
+                        productsSheet.Cells[row, 7].Value = createdAt.ToString("O");
+                    }
+                    else
+                    {
+                        row = (productsSheet.Dimension?.Rows ?? 1) + 1;
+                        productId = Guid.NewGuid();
+                        productRowByCode[productCode] = row;
+
+                        productsSheet.Cells[row, 1].Value = productId.ToString();
+                        productsSheet.Cells[row, 2].Value = productCode;
+                        productsSheet.Cells[row, 3].Value = productCode;
+                        productsSheet.Cells[row, 4].Value = targetQty > 0 ? $"Imported plan quantity: {targetQty}" : string.Empty;
+                        productsSheet.Cells[row, 5].Value = "Finished Goods";
+                        productsSheet.Cells[row, 6].Value = true;
+                        productsSheet.Cells[row, 7].Value = DateTime.Now.ToString("O");
+                    }
+
+                    productIdByCode[productCode] = productId;
+                    importedProductIds.Add(productId);
+                }
+
+                var bomStaged = new List<(Guid ProductId, Guid MaterialId, decimal Qty)>(bomRows.Count);
+
+                foreach (var (productCode, materialCode, qtyPerUnit) in bomRows)
+                {
+                    if (!productIdByCode.TryGetValue(productCode, out var productId))
+                    {
+                        // Create missing product if BOM references a code not present in product plan.
+                        int productRow = (productsSheet.Dimension?.Rows ?? 1) + 1;
+                        productId = Guid.NewGuid();
+                        productRowByCode[productCode] = productRow;
+                        productIdByCode[productCode] = productId;
+                        importedProductIds.Add(productId);
+
+                        productsSheet.Cells[productRow, 1].Value = productId.ToString();
+                        productsSheet.Cells[productRow, 2].Value = productCode;
+                        productsSheet.Cells[productRow, 3].Value = productCode;
+                        productsSheet.Cells[productRow, 4].Value = string.Empty;
+                        productsSheet.Cells[productRow, 5].Value = "Finished Goods";
+                        productsSheet.Cells[productRow, 6].Value = true;
+                        productsSheet.Cells[productRow, 7].Value = DateTime.Now.ToString("O");
+                    }
+
+                    var materialId = EnsureMaterialRow(materialsSheet, materialRowByCode, materialCode, importedStocksByMaterialCode);
+                    bomStaged.Add((productId, materialId, qtyPerUnit));
+                }
+
+                // Stock rows can introduce materials that are not used in BOM yet.
+                foreach (var stockEntry in importedStocksByMaterialCode)
+                {
+                    EnsureMaterialRow(materialsSheet, materialRowByCode, stockEntry.Key, importedStocksByMaterialCode);
+                }
+
+                var bomRowCount = bomSheet.Dimension?.Rows ?? 0;
+                for (int row = bomRowCount; row >= 2; row--)
+                {
+                    if (Guid.TryParse(bomSheet.Cells[row, 2].Text, out var productId) && importedProductIds.Contains(productId))
+                    {
+                        bomSheet.DeleteRow(row);
+                    }
+                }
+
+                foreach (var (productId, materialId, qty) in bomStaged)
+                {
+                    var row = (bomSheet.Dimension?.Rows ?? 1) + 1;
+                    bomSheet.Cells[row, 1].Value = Guid.NewGuid().ToString();
+                    bomSheet.Cells[row, 2].Value = productId.ToString();
+                    bomSheet.Cells[row, 3].Value = materialId.ToString();
+                    bomSheet.Cells[row, 4].Value = qty;
+                }
+
+                package.Save();
+            }
+        }
+
+        private static Dictionary<string, int> BuildCodeRowMap(ExcelWorksheet sheet, int codeColumn)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var rowCount = sheet.Dimension?.Rows ?? 0;
+            for (int row = 2; row <= rowCount; row++)
+            {
+                var code = sheet.Cells[row, codeColumn].Text.Trim();
+                if (string.IsNullOrWhiteSpace(code) || map.ContainsKey(code)) continue;
+                map[code] = row;
+            }
+
+            return map;
+        }
+
+        private static Guid EnsureGuid(ExcelWorksheet sheet, int row, int column)
+        {
+            if (Guid.TryParse(sheet.Cells[row, column].Text, out var id))
+            {
+                return id;
+            }
+
+            id = Guid.NewGuid();
+            sheet.Cells[row, column].Value = id.ToString();
+            return id;
+        }
+
+        private static DateTime ParseDateTimeOrNow(string text)
+        {
+            return DateTime.TryParse(text, out var date) ? date : DateTime.Now;
+        }
+
+        private static Guid EnsureMaterialRow(
+            ExcelWorksheet materialsSheet,
+            Dictionary<string, int> materialRowByCode,
+            string materialCode,
+            IReadOnlyDictionary<string, decimal> importedStocksByMaterialCode)
+        {
+            int row;
+            Guid materialId;
+
+            if (materialRowByCode.TryGetValue(materialCode, out row))
+            {
+                materialId = EnsureGuid(materialsSheet, row, 1);
+                var existingName = materialsSheet.Cells[row, 3].Text.Trim();
+                var existingUnit = materialsSheet.Cells[row, 5].Text.Trim();
+                var existingCategory = materialsSheet.Cells[row, 9].Text.Trim();
+
+                materialsSheet.Cells[row, 2].Value = materialCode;
+                materialsSheet.Cells[row, 3].Value = string.IsNullOrWhiteSpace(existingName) ? materialCode : existingName;
+                if (string.IsNullOrWhiteSpace(materialsSheet.Cells[row, 4].Text))
+                    materialsSheet.Cells[row, 4].Value = "Imported from planning workbook";
+                materialsSheet.Cells[row, 5].Value = string.IsNullOrWhiteSpace(existingUnit) ? "pcs" : existingUnit;
+                materialsSheet.Cells[row, 9].Value = string.IsNullOrWhiteSpace(existingCategory) ? "Raw Materials" : existingCategory;
+
+                if (importedStocksByMaterialCode.TryGetValue(materialCode, out var importedStock))
+                {
+                    materialsSheet.Cells[row, 6].Value = importedStock;
+                    materialsSheet.Cells[row, 10].Value = DateTime.Now.ToString("O");
+                }
+
+                return materialId;
+            }
+
+            row = (materialsSheet.Dimension?.Rows ?? 1) + 1;
+            materialRowByCode[materialCode] = row;
+            materialId = Guid.NewGuid();
+
+            materialsSheet.Cells[row, 1].Value = materialId.ToString();
+            materialsSheet.Cells[row, 2].Value = materialCode;
+            materialsSheet.Cells[row, 3].Value = materialCode;
+            materialsSheet.Cells[row, 4].Value = "Imported from planning workbook";
+            materialsSheet.Cells[row, 5].Value = "pcs";
+            materialsSheet.Cells[row, 6].Value = importedStocksByMaterialCode.TryGetValue(materialCode, out var stock) ? stock : 0m;
+            materialsSheet.Cells[row, 7].Value = 0m;
+            materialsSheet.Cells[row, 8].Value = 0m;
+            materialsSheet.Cells[row, 9].Value = "Raw Materials";
+            materialsSheet.Cells[row, 10].Value = DateTime.Now.ToString("O");
+
+            return materialId;
         }
 
         #endregion
