@@ -7,59 +7,104 @@
              mc:Ignorable="d" 
              d:DesignHeight="600" d:DesignWidth="1000">
 
-    <Grid Margin="40">
+    <Grid Margin="28">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="20"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!-- Hero -->
+        <Border Grid.Row="0" Style="{StaticResource CardBorder}" Background="{StaticResource HeroGradientBrush}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="240"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Inventory Health Snapshot" FontSize="24" FontWeight="SemiBold"/>
+                    <TextBlock Text="See current material coverage, product readiness, and urgent stock risks in one place."
+                               Margin="0,8,0,0"
+                               TextWrapping="Wrap"
+                               Foreground="{StaticResource TextGrayBrush}"/>
+                    <Border Margin="0,18,0,0" Padding="12,8" HorizontalAlignment="Left" CornerRadius="10"
+                            Background="#14FFFFFF" BorderBrush="#70FFFFFF" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Live data from Excel-backed store" FontWeight="SemiBold" Foreground="{StaticResource PrimaryDarkBlueBrush}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+                <Border Grid.Column="1" CornerRadius="16" Padding="16" Background="#AAFFFFFF" BorderBrush="#CCFFFFFF" BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Risk Pulse" FontSize="12" Foreground="{StaticResource TextLightBrush}"/>
+                        <TextBlock Text="{Binding LowStockCount}" FontSize="34" FontWeight="Bold" Foreground="{StaticResource ErrorBrush}"/>
+                        <TextBlock Text="materials below minimum level" Foreground="{StaticResource TextGrayBrush}"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Border>
+
         <!-- Stats Overview -->
-        <Grid Grid.Row="0" Margin="0,0,0,40">
+        <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="30"/>
+                <ColumnDefinition Width="16"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="30"/>
+                <ColumnDefinition Width="16"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Total Materials -->
             <Border Grid.Column="0" Style="{StaticResource CardBorder}">
                 <StackPanel>
-                    <TextBlock Text="Total Materials" Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,10"/>
-                    <TextBlock Text="{Binding TotalMaterials}" FontSize="32" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock Text="Materials Catalog" Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding TotalMaterials}" FontSize="30" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock Text="tracked material records" Margin="0,6,0,0" Foreground="{StaticResource TextGrayBrush}"/>
                 </StackPanel>
             </Border>
 
             <!-- Total Products -->
-            <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+            <Border Grid.Column="2" Style="{StaticResource CardBorder}" Background="{StaticResource SurfaceTintBrush}">
                 <StackPanel>
-                    <TextBlock Text="Active Products" Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,10"/>
-                    <TextBlock Text="{Binding TotalProducts}" FontSize="32" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock Text="Active Products" Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding TotalProducts}" FontSize="30" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}"/>
+                    <TextBlock Text="ready for planning and BOM analysis" Margin="0,6,0,0" Foreground="{StaticResource TextGrayBrush}"/>
                 </StackPanel>
             </Border>
 
             <!-- Low Stock Alerts -->
             <Border Grid.Column="4" Style="{StaticResource CardBorder}">
                 <StackPanel>
-                    <TextBlock Text="Low Stock Alerts" Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,10"/>
-                    <TextBlock Text="{Binding LowStockCount}" FontSize="32" FontWeight="Bold" Foreground="{StaticResource ErrorBrush}"/>
+                    <TextBlock Text="Low Stock Alerts" Foreground="{StaticResource TextLightBrush}" Margin="0,0,0,8"/>
+                    <TextBlock Text="{Binding LowStockCount}" FontSize="30" FontWeight="Bold" Foreground="{StaticResource ErrorBrush}"/>
+                    <TextBlock Text="requires replenishment planning" Margin="0,6,0,0" Foreground="{StaticResource TextGrayBrush}"/>
                 </StackPanel>
             </Border>
         </Grid>
 
         <!-- Bottom Sections -->
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="4">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="40"/>
-                <ColumnDefinition Width="400"/>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="420"/>
             </Grid.ColumnDefinitions>
 
             <!-- Recent Activity -->
             <Border Grid.Column="0" Style="{StaticResource CardBorder}">
                 <StackPanel>
-                    <TextBlock Text="Recent Stock Activity" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,25"/>
+                    <Grid Margin="0,0,0,16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Recent Stock Activity" FontSize="18" FontWeight="SemiBold"/>
+                        <Border Grid.Column="1" Background="{StaticResource SurfaceTintStrongBrush}" CornerRadius="10" Padding="10,4" BorderBrush="#D7E8E6" BorderThickness="1">
+                            <TextBlock Text="Live Feed" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource PrimaryBrush}"/>
+                        </Border>
+                    </Grid>
                     <DataGrid ItemsSource="{Binding RecentTransactions}" 
                               AutoGenerateColumns="False" CanUserAddRows="False"
                               Background="Transparent" BorderThickness="0"
@@ -75,9 +120,18 @@
             </Border>
 
             <!-- Low Stock List -->
-            <Border Grid.Column="2" Style="{StaticResource CardBorder}">
+            <Border Grid.Column="2" Style="{StaticResource CardBorder}" Background="#FFFDFBFB">
                 <StackPanel>
-                    <TextBlock Text="Low Stock Warning" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,25" Foreground="{StaticResource ErrorBrush}"/>
+                    <Grid Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Low Stock Warning" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource ErrorBrush}"/>
+                        <Border Grid.Column="1" Background="#FFFEEDEC" CornerRadius="10" Padding="10,4" BorderBrush="#FFF8D2CF" BorderThickness="1">
+                            <TextBlock Text="{Binding LowStockCount}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource ErrorBrush}"/>
+                        </Border>
+                    </Grid>
                     <ItemsControl ItemsSource="{Binding LowStockMaterials}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
