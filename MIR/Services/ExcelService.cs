@@ -4,6 +4,7 @@ using System.IO;
 using System; // Added for AppDomain, Environment, Guid, DateTime, Enum
 using System.Collections.Generic; // Added for List<User>
 using System.Linq; // Added for FirstOrDefault
+using System.Globalization;
 using BCrypt.Net; // Added for BCrypt.Net.BCrypt
 
 namespace MIR.Services
@@ -808,17 +809,25 @@ namespace MIR.Services
 
         public void ImportFromExcel(string filePath)
         {
-            // This is a simplified import that merges data
-            // In production, you might want to add conflict resolution
             lock (_lock)
             {
                 using var importPackage = new ExcelPackage(new FileInfo(filePath));
+
+                // Support the user-facing planning template:
+                // Sheet 1 "Products": Product | Sum of O/S Qty
+                // Sheet 2 "materials": Item Code | SQL Code | Unit
+                // Sheet 3 "stock"/"stocks" (optional): SQL Code | Stock
+                if (LooksLikePlanningTemplate(importPackage))
+                {
+                    ImportPlanningTemplate(importPackage);
+                    return;
+                }
                 
                 // Import Materials
                 var materialsSheet = importPackage.Workbook.Worksheets["Materials"];
                 if (materialsSheet != null)
                 {
-                    var existingMaterials = GetAllMaterials().ToDictionary(m => m.Code);
+                    var existingMaterials = GetAllMaterials().ToDictionary(m => m.Code, StringComparer.OrdinalIgnoreCase);
                     var rowCount = materialsSheet.Dimension?.Rows ?? 0;
                     
                     for (int row = 2; row <= rowCount; row++)
@@ -840,7 +849,9 @@ namespace MIR.Services
                         
                         if (existingMaterials.ContainsKey(code))
                         {
-                            material.Id = existingMaterials[code].Id;
+                            var existing = existingMaterials[code];
+                            material.Id = existing.Id;
+                            material.LastUpdated = existing.LastUpdated;
                             UpdateMaterial(material);
                         }
                         else
@@ -854,7 +865,7 @@ namespace MIR.Services
                 var productsSheet = importPackage.Workbook.Worksheets["Products"];
                 if (productsSheet != null)
                 {
-                    var existingProducts = GetAllProducts().ToDictionary(p => p.Code);
+                    var existingProducts = GetAllProducts().ToDictionary(p => p.Code, StringComparer.OrdinalIgnoreCase);
                     var rowCount = productsSheet.Dimension?.Rows ?? 0;
                     
                     for (int row = 2; row <= rowCount; row++)
@@ -873,7 +884,9 @@ namespace MIR.Services
                         
                         if (existingProducts.ContainsKey(code))
                         {
-                            product.Id = existingProducts[code].Id;
+                            var existing = existingProducts[code];
+                            product.Id = existing.Id;
+                            product.CreatedAt = existing.CreatedAt;
                             UpdateProduct(product);
                         }
                         else
@@ -883,6 +896,272 @@ namespace MIR.Services
                     }
                 }
             }
+        }
+
+        private bool LooksLikePlanningTemplate(ExcelPackage package)
+        {
+            var productsSheet = package.Workbook.Worksheets["Products"];
+            var materialsSheet = package.Workbook.Worksheets["materials"] ?? package.Workbook.Worksheets["Materials"];
+            var stockSheet = package.Workbook.Worksheets["stocks"]
+                            ?? package.Workbook.Worksheets["stock"]
+                            ?? package.Workbook.Worksheets["Stocks"]
+                            ?? package.Workbook.Worksheets["Stock"];
+
+            if (productsSheet == null || materialsSheet == null)
+            {
+                return false;
+            }
+
+            var productHeaders = GetHeaderMap(productsSheet);
+            var materialHeaders = GetHeaderMap(materialsSheet);
+
+            var baseTemplateMatch = productHeaders.ContainsKey(NormalizeHeader("Product"))
+                                    && productHeaders.ContainsKey(NormalizeHeader("Sum of O/S Qty"))
+                                    && materialHeaders.ContainsKey(NormalizeHeader("Item Code"))
+                                    && materialHeaders.ContainsKey(NormalizeHeader("SQL Code"))
+                                    && materialHeaders.ContainsKey(NormalizeHeader("Unit"));
+
+            if (!baseTemplateMatch) return false;
+
+            // Optional 3rd stock sheet validation when present.
+            if (stockSheet != null)
+            {
+                var stockHeaders = GetHeaderMap(stockSheet);
+                return stockHeaders.ContainsKey(NormalizeHeader("SQL Code"))
+                       && stockHeaders.ContainsKey(NormalizeHeader("Stock"));
+            }
+
+            return true;
+        }
+
+        private void ImportPlanningTemplate(ExcelPackage importPackage)
+        {
+            var productsSheet = importPackage.Workbook.Worksheets["Products"]!;
+            var materialsSheet = importPackage.Workbook.Worksheets["materials"] ?? importPackage.Workbook.Worksheets["Materials"]!;
+            var stockSheet = importPackage.Workbook.Worksheets["stocks"]
+                            ?? importPackage.Workbook.Worksheets["stock"]
+                            ?? importPackage.Workbook.Worksheets["Stocks"]
+                            ?? importPackage.Workbook.Worksheets["Stock"];
+
+            var productHeaders = GetHeaderMap(productsSheet);
+            var materialHeaders = GetHeaderMap(materialsSheet);
+            var stockHeaders = stockSheet != null ? GetHeaderMap(stockSheet) : null;
+
+            int productCodeCol = productHeaders[NormalizeHeader("Product")];
+            int productQtyCol = productHeaders[NormalizeHeader("Sum of O/S Qty")];
+
+            int bomProductCodeCol = materialHeaders[NormalizeHeader("Item Code")];
+            int bomMaterialCodeCol = materialHeaders[NormalizeHeader("SQL Code")];
+            int bomQtyCol = materialHeaders[NormalizeHeader("Unit")];
+
+            int? stockMaterialCodeCol = null;
+            int? stockQtyCol = null;
+            if (stockHeaders != null
+                && stockHeaders.TryGetValue(NormalizeHeader("SQL Code"), out var stockCodeCol)
+                && stockHeaders.TryGetValue(NormalizeHeader("Stock"), out var stockValueCol))
+            {
+                stockMaterialCodeCol = stockCodeCol;
+                stockQtyCol = stockValueCol;
+            }
+
+            var existingProducts = GetAllProducts().ToDictionary(p => p.Code, StringComparer.OrdinalIgnoreCase);
+            var existingMaterials = GetAllMaterials().ToDictionary(m => m.Code, StringComparer.OrdinalIgnoreCase);
+            var importedStocksByMaterialCode = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+
+            if (stockSheet != null && stockMaterialCodeCol.HasValue && stockQtyCol.HasValue)
+            {
+                var stockRowCount = stockSheet.Dimension?.Rows ?? 0;
+                for (int row = 2; row <= stockRowCount; row++)
+                {
+                    var materialCode = stockSheet.Cells[row, stockMaterialCodeCol.Value].Text.Trim();
+                    if (string.IsNullOrWhiteSpace(materialCode)) continue;
+
+                    var stockQty = ParseDecimalFlexible(stockSheet.Cells[row, stockQtyCol.Value].Text);
+                    importedStocksByMaterialCode[materialCode] = stockQty;
+                }
+            }
+
+            var importedProductIds = new HashSet<Guid>();
+            var productIdByCode = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+
+            var productRowCount = productsSheet.Dimension?.Rows ?? 0;
+            for (int row = 2; row <= productRowCount; row++)
+            {
+                var productCode = productsSheet.Cells[row, productCodeCol].Text.Trim();
+                if (string.IsNullOrWhiteSpace(productCode)) continue;
+
+                var targetQty = ParseDecimalFlexible(productsSheet.Cells[row, productQtyCol].Text);
+
+                if (existingProducts.TryGetValue(productCode, out var existingProduct))
+                {
+                    existingProduct.Name = string.IsNullOrWhiteSpace(existingProduct.Name) ? productCode : existingProduct.Name;
+                    existingProduct.IsActive = true;
+                    UpdateProduct(existingProduct);
+                    productIdByCode[productCode] = existingProduct.Id;
+                    importedProductIds.Add(existingProduct.Id);
+                }
+                else
+                {
+                    var newProduct = new Product
+                    {
+                        Code = productCode,
+                        Name = productCode,
+                        Description = targetQty > 0 ? $"Imported plan quantity: {targetQty}" : string.Empty,
+                        Category = "Finished Goods",
+                        IsActive = true
+                    };
+
+                    AddProduct(newProduct);
+                    existingProducts[productCode] = newProduct;
+                    productIdByCode[productCode] = newProduct.Id;
+                    importedProductIds.Add(newProduct.Id);
+                }
+            }
+
+            var stagedBomRows = new List<BillOfMaterial>();
+            var materialsRowCount = materialsSheet.Dimension?.Rows ?? 0;
+            for (int row = 2; row <= materialsRowCount; row++)
+            {
+                var productCode = materialsSheet.Cells[row, bomProductCodeCol].Text.Trim();
+                var materialCode = materialsSheet.Cells[row, bomMaterialCodeCol].Text.Trim();
+                if (string.IsNullOrWhiteSpace(productCode) || string.IsNullOrWhiteSpace(materialCode)) continue;
+
+                var quantityPerUnit = ParseDecimalFlexible(materialsSheet.Cells[row, bomQtyCol].Text);
+                if (quantityPerUnit <= 0) continue;
+
+                if (!productIdByCode.TryGetValue(productCode, out var productId))
+                {
+                    // If a BOM row references a product not listed in the Products sheet, create it on the fly.
+                    if (!existingProducts.TryGetValue(productCode, out var product))
+                    {
+                        product = new Product
+                        {
+                            Code = productCode,
+                            Name = productCode,
+                            Category = "Finished Goods",
+                            IsActive = true
+                        };
+                        AddProduct(product);
+                        existingProducts[productCode] = product;
+                    }
+
+                    productId = product.Id;
+                    productIdByCode[productCode] = productId;
+                    importedProductIds.Add(productId);
+                }
+
+                if (!existingMaterials.TryGetValue(materialCode, out var material))
+                {
+                    material = new Material
+                    {
+                        Code = materialCode,
+                        Name = materialCode,
+                        Description = "Imported from planning workbook",
+                        Unit = "pcs",
+                        Category = "Raw Materials"
+                    };
+                    AddMaterial(material);
+                    existingMaterials[materialCode] = material;
+                }
+                if (importedStocksByMaterialCode.TryGetValue(materialCode, out var importedStockForMaterial))
+                {
+                    if (material.CurrentStock != importedStockForMaterial)
+                    {
+                        material.CurrentStock = importedStockForMaterial;
+                        UpdateMaterial(material);
+                    }
+                }
+
+                stagedBomRows.Add(new BillOfMaterial(productId, material.Id, quantityPerUnit)
+                {
+                    ProductCode = productCode,
+                    ProductName = existingProducts.TryGetValue(productCode, out var p) ? p.Name : productCode,
+                    MaterialCode = material.Code,
+                    MaterialName = material.Name,
+                    MaterialUnit = material.Unit
+                });
+            }
+
+            // Also apply imported stock to materials that exist in stock sheet but were not part of BOM rows.
+            foreach (var stockEntry in importedStocksByMaterialCode)
+            {
+                if (!existingMaterials.TryGetValue(stockEntry.Key, out var material))
+                {
+                    material = new Material
+                    {
+                        Code = stockEntry.Key,
+                        Name = stockEntry.Key,
+                        Description = "Imported from stock sheet",
+                        Unit = "pcs",
+                        Category = "Raw Materials",
+                        CurrentStock = stockEntry.Value
+                    };
+                    AddMaterial(material);
+                    existingMaterials[stockEntry.Key] = material;
+                    continue;
+                }
+
+                if (material.CurrentStock != stockEntry.Value)
+                {
+                    material.CurrentStock = stockEntry.Value;
+                    UpdateMaterial(material);
+                }
+            }
+
+            // Replace BOM rows for imported products to prevent duplicates and keep workbook sync deterministic.
+            foreach (var productId in importedProductIds)
+            {
+                DeleteBOMByProductId(productId);
+            }
+
+            foreach (var bom in stagedBomRows)
+            {
+                AddBOM(bom);
+            }
+        }
+
+        private static Dictionary<string, int> GetHeaderMap(ExcelWorksheet sheet)
+        {
+            var map = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var colCount = sheet.Dimension?.Columns ?? 0;
+
+            for (int col = 1; col <= colCount; col++)
+            {
+                var header = sheet.Cells[1, col].Text?.Trim();
+                if (string.IsNullOrWhiteSpace(header)) continue;
+
+                var normalized = NormalizeHeader(header);
+                if (!map.ContainsKey(normalized))
+                {
+                    map[normalized] = col;
+                }
+            }
+
+            return map;
+        }
+
+        private static string NormalizeHeader(string header)
+        {
+            return header.Trim().ToLowerInvariant();
+        }
+
+        private static decimal ParseDecimalFlexible(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return 0m;
+
+            if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec))
+                return dec;
+
+            if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out dec))
+                return dec;
+
+            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var dbl))
+                return (decimal)dbl;
+
+            if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out dbl))
+                return (decimal)dbl;
+
+            return 0m;
         }
 
         #endregion

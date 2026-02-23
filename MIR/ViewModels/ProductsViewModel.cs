@@ -3,6 +3,9 @@ using CommunityToolkit.Mvvm.Input;
 using MIR.Models;
 using MIR.Services;
 using System.Collections.ObjectModel;
+using Microsoft.Win32;
+using System.Windows;
+using System.Threading.Tasks;
 
 namespace MIR.ViewModels
 {
@@ -37,6 +40,9 @@ namespace MIR.ViewModels
 
         [ObservableProperty]
         private decimal _bomQuantity = 1;
+
+        [ObservableProperty]
+        private bool _isImporting;
 
         public string[] Categories => ProductCategories.Categories;
 
@@ -156,6 +162,50 @@ namespace MIR.ViewModels
             if (product == null) return;
             _excelService.DeleteProduct(product.Id);
             LoadProducts();
+        }
+
+        [RelayCommand]
+        private async Task ImportFromExcel()
+        {
+            if (IsImporting) return;
+
+            var dialog = new OpenFileDialog
+            {
+                Title = "Import Products / BOM from Excel",
+                Filter = "Excel Files (*.xlsx)|*.xlsx",
+                CheckFileExists = true
+            };
+
+            if (dialog.ShowDialog() != true) return;
+
+            try
+            {
+                IsImporting = true;
+
+                // Run import off the UI thread so the window stays responsive.
+                await Task.Run(() => _excelService.ImportFromExcel(dialog.FileName));
+
+                AvailableMaterials = new ObservableCollection<Material>(_excelService.GetAllMaterials());
+                LoadProducts();
+
+                MessageBox.Show(
+                    "Excel import completed. Products, materials, and bill of materials were updated.",
+                    "Import Complete",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(
+                    $"Import failed: {ex.Message}",
+                    "Import Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            finally
+            {
+                IsImporting = false;
+            }
         }
 
         partial void OnSearchTextChanged(string value)
