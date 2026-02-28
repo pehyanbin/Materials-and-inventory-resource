@@ -52,7 +52,7 @@ namespace MIR.Views {
                 return;
             }
             _contentLoaded = true;
-            System.Uri resourceLocater = new System.Uri("/MIR;component/views/stockview.xaml", System.UriKind.Relative);
+            System.Uri resourceLocater = new System.Uri("/MIR;V1.0.0.0;component/views/stockview.xaml", System.UriKind.Relative);
             
             #line 1 "..\..\..\..\Views\StockView.xaml"
             System.Windows.Application.LoadComponent(this, resourceLocater);
