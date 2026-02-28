@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "944Rn8q7fPM=",
+  "dgSpecHash": "IYzrIfeW740=",
   "success": true,
-  "projectFilePath": "C:\\Users\\pehya\\Downloads\\Materials-and-inventory-resource\\MIR\\MIR.csproj",
+  "projectFilePath": "C:\\Users\\pehya\\Downloads\\Materials-and-inventory-resource-4-performance-improved\\Materials-and-inventory-resource-4-performance-improved\\Materials-and-inventory-resource\\MIR\\MIR.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\pehya\\.nuget\\packages\\bcrypt.net-next\\4.0.3\\bcrypt.net-next.4.0.3.nupkg.sha512",
     "C:\\Users\\pehya\\.nuget\\packages\\communitytoolkit.mvvm\\8.4.0\\communitytoolkit.mvvm.8.4.0.nupkg.sha512",

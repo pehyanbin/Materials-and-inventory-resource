@@ -840,9 +840,9 @@ namespace MIR.Services
                             Name = materialsSheet.Cells[row, 3].Text,
                             Description = materialsSheet.Cells[row, 4].Text,
                             Unit = materialsSheet.Cells[row, 5].Text,
-                            CurrentStock = decimal.TryParse(materialsSheet.Cells[row, 6].Text, out var stock) ? stock : 0,
-                            MinStockLevel = decimal.TryParse(materialsSheet.Cells[row, 7].Text, out var min) ? min : 0,
-                            UnitPrice = decimal.TryParse(materialsSheet.Cells[row, 8].Text, out var price) ? price : 0,
+                            CurrentStock = ParseDecimalFlexible(materialsSheet.Cells[row, 6].Text),
+                            MinStockLevel = ParseDecimalFlexible(materialsSheet.Cells[row, 7].Text),
+                            UnitPrice = ParseDecimalFlexible(materialsSheet.Cells[row, 8].Text),
                             Category = materialsSheet.Cells[row, 9].Text
                         };
                         
@@ -1030,16 +1030,16 @@ namespace MIR.Services
         {
             if (string.IsNullOrWhiteSpace(value)) return 0m;
 
-            if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec))
+            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var dec))
                 return dec;
 
-            if (decimal.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out dec))
+            if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.CurrentCulture, out dec))
                 return dec;
 
-            if (double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var dbl))
+            if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var dbl))
                 return (decimal)dbl;
 
-            if (double.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out dbl))
+            if (double.TryParse(value, NumberStyles.Any, CultureInfo.CurrentCulture, out dbl))
                 return (decimal)dbl;
 
             return 0m;
