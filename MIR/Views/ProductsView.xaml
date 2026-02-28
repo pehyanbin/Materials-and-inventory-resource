@@ -1,0 +1,234 @@
+<UserControl x:Class="MIR.Views.ProductsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:MIR.Views"
+             mc:Ignorable="d" 
+             d:DesignHeight="600" d:DesignWidth="1000">
+
+    <Grid Margin="40">
+        <!-- List View -->
+        <Grid Visibility="{Binding IsAddingOrEditing, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Invert}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Actions Header -->
+            <Grid Grid.Row="0" Margin="0,0,0,30">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="300"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Style="{StaticResource ModernTextBox}" 
+                         Tag="Search products..." 
+                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                         Grid.Column="0"/>
+                
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button Content="Import Excel"
+                            Style="{StaticResource PrimaryButton}"
+                            Command="{Binding ImportFromExcelCommand}"
+                            Width="130"
+                            Margin="0,0,12,0"/>
+                    <Button Content="+ Add Product" 
+                            Style="{StaticResource PrimaryButton}" 
+                            Command="{Binding StartAddProductCommand}"
+                            Width="150"/>
+                </StackPanel>
+            </Grid>
+
+            <Border Grid.RowSpan="2"
+                    Background="#66FFFFFF"
+                    Visibility="{Binding IsImporting, Converter={StaticResource BoolToVisibilityConverter}}">
+                <Border HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="White"
+                        CornerRadius="12"
+                        Padding="24"
+                        BorderBrush="{StaticResource BorderBrush}"
+                        BorderThickness="1">
+                    <StackPanel>
+                        <TextBlock Text="Importing Excel file..."
+                                   FontSize="16"
+                                   FontWeight="SemiBold"
+                                   HorizontalAlignment="Center"/>
+                        <TextBlock Text="Please wait. The app will remain responsive."
+                                   Margin="0,8,0,0"
+                                   Foreground="{StaticResource TextLightBrush}"
+                                   HorizontalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Border>
+
+            <!-- Data Table -->
+            <Border Grid.Row="1" Style="{StaticResource CardBorder}" Padding="0">
+                <DataGrid ItemsSource="{Binding Products}" 
+                          SelectedItem="{Binding SelectedProduct}"
+                          AutoGenerateColumns="False" 
+                          CanUserAddRows="False"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          HeadersVisibility="Column"
+                          GridLinesVisibility="None"
+                          RowHeight="50">
+                    <DataGrid.Resources>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background" Value="Transparent"/>
+                            <Setter Property="Foreground" Value="{StaticResource TextLightBrush}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                            <Setter Property="Padding" Value="20,10"/>
+                            <Setter Property="BorderThickness" Value="0,0,0,1"/>
+                            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+                        </Style>
+                        <Style TargetType="DataGridRow">
+                            <Setter Property="Background" Value="Transparent"/>
+                        </Style>
+                        <Style TargetType="DataGridCell">
+                            <Setter Property="BorderThickness" Value="0"/>
+                            <Setter Property="Padding" Value="20,0"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        </Style>
+                    </DataGrid.Resources>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="CODE" Binding="{Binding Code}" Width="120"/>
+                        <DataGridTextColumn Header="NAME" Binding="{Binding Name}" Width="*"/>
+                        <DataGridTextColumn Header="CATEGORY" Binding="{Binding Category}" Width="150"/>
+                        <DataGridTemplateColumn Header="STATUS" Width="100">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border CornerRadius="10" Padding="8,4" HorizontalAlignment="Left"
+                                            Background="{Binding IsActive, Converter={StaticResource StatusBgConverter}}">
+                                        <TextBlock Text="{Binding IsActive, Converter={StaticResource StatusTextConverter}}"
+                                                   FontSize="11" FontWeight="Bold" 
+                                                   Foreground="White"/>
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTemplateColumn Header="ACTIONS" Width="120">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="Edit" 
+                                                Foreground="{StaticResource PrimaryBrush}"
+                                                Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.StartEditProductCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"/>
+                                        <Button Content="Delete" 
+                                                Foreground="{StaticResource ErrorBrush}"
+                                                Background="Transparent" BorderThickness="0" Margin="10,0,0,0"
+                                                Command="{Binding DataContext.DeleteProductCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Border>
+        </Grid>
+
+        <!-- Add/Edit Form View -->
+        <Grid Visibility="{Binding IsAddingOrEditing, Converter={StaticResource BoolToVisibilityConverter}}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="400"/>
+                <ColumnDefinition Width="20"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Product info -->
+            <Border Grid.Column="0" Style="{StaticResource CardBorder}" VerticalAlignment="Top">
+                <StackPanel>
+                    <TextBlock Text="Product Details" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,30"/>
+
+                    <TextBlock Text="Code" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBox Style="{StaticResource ModernTextBox}" Text="{Binding EditingProduct.Code}" Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Name" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <TextBox Style="{StaticResource ModernTextBox}" Text="{Binding EditingProduct.Name}" Margin="0,0,0,20"/>
+
+                    <TextBlock Text="Category" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                    <ComboBox ItemsSource="{Binding Categories}" 
+                              SelectedItem="{Binding EditingProduct.Category}"
+                              Height="40" Margin="0,0,0,20"/>
+
+                    <CheckBox Content="Active Product" IsChecked="{Binding EditingProduct.IsActive}" Margin="0,0,0,30"/>
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="Cancel" 
+                                Style="{StaticResource PrimaryButton}" 
+                                Background="Transparent" Foreground="{StaticResource TextGrayBrush}"
+                                Command="{Binding CancelEditCommand}"
+                                Margin="0,0,15,0"/>
+                        <Button Content="Save Product" 
+                                Style="{StaticResource PrimaryButton}" 
+                                Command="{Binding SaveProductCommand}"
+                                Width="150"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- BOM info -->
+            <Border Grid.Column="2" Style="{StaticResource CardBorder}" VerticalAlignment="Stretch">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="Bill of Materials" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,30"/>
+
+                    <!-- Add Material to BOM -->
+                    <Grid Grid.Row="1" Margin="0,0,0,20">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="80"/>
+                            <ColumnDefinition Width="100"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                            <TextBlock Text="Select Material" FontSize="12" Margin="0,0,0,5"/>
+                            <ComboBox ItemsSource="{Binding AvailableMaterials}" 
+                                      SelectedItem="{Binding SelectedBomMaterial}"
+                                      DisplayMemberPath="Name"
+                                      Height="40"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,10,0">
+                            <TextBlock Text="Qty" FontSize="12" Margin="0,0,0,5"/>
+                            <TextBox Style="{StaticResource ModernTextBox}" Text="{Binding BomQuantity}"/>
+                        </StackPanel>
+                        <Button Grid.Column="2" Content="Add" VerticalAlignment="Bottom"
+                                Style="{StaticResource PrimaryButton}" 
+                                Command="{Binding AddToBOMCommand}"/>
+                    </Grid>
+
+                    <!-- BOM List -->
+                    <DataGrid Grid.Row="2" ItemsSource="{Binding CurrentBOM}" 
+                              AutoGenerateColumns="False" CanUserAddRows="False"
+                              Background="{StaticResource BgGrayBrush}">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Material" Binding="{Binding MaterialName}" Width="*"/>
+                            <DataGridTextColumn Header="Code" Binding="{Binding MaterialCode}" Width="100"/>
+                            <DataGridTextColumn Header="Qty" Binding="{Binding Quantity}" Width="60"/>
+                            <DataGridTextColumn Header="Unit" Binding="{Binding MaterialUnit}" Width="60"/>
+                            <DataGridTemplateColumn Header="" Width="50">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="×" FontSize="18" Foreground="{StaticResource ErrorBrush}"
+                                                Background="Transparent" BorderThickness="0"
+                                                Command="{Binding DataContext.RemoveFromBOMCommand, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                CommandParameter="{Binding}"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>
